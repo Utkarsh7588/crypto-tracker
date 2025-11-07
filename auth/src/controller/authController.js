@@ -2,6 +2,7 @@ const { now } = require('mongoose');
 const EmailOtp = require('../models/EmailOtp');
 const User = require('../models/User');
 const { generateToken, verifyEmailToken, generateEmailToken } = require('../utils/jwtutils');
+const { emailProducer } = require('../producers/emailProducer');
 
 const register = async (req, res) => {
   try {
@@ -30,6 +31,8 @@ const register = async (req, res) => {
     });
 
     await emailOtp.save();
+
+    await emailProducer(email, emailOtp.otp);
 
     res.status(201).json({
       message: 'Verify email to complete user registration',
