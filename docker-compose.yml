@@ -9,7 +9,8 @@ services:
       ZOOKEEPER_TICK_TIME: 2000
     ports:
       - "2181:2181"
-
+    networks:
+      - default
 
   kafka:
     image: confluentinc/cp-kafka:7.4.0
@@ -25,7 +26,8 @@ services:
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,EXTERNAL://localhost:9092
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-
+    networks:
+      - default
 
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
@@ -38,14 +40,16 @@ services:
       KAFKA_CLUSTERS_0_NAME: local
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
       KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
-
+    networks:
+      - default
 
   redis:
     image: redis:7
     container_name: redis
     ports:
       - "6379:6379"
-
+    networks:
+      - default
 
   consul:
     image: hashicorp/consul:1.18
@@ -54,7 +58,60 @@ services:
       - "8500:8500" 
       - "8600:8600/udp"
     command: "agent -server -bootstrap -ui -client=0.0.0.0"
+    networks:
+      - default
+
+  mongodb:
+    image: mongo:6
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - default
+
+  auth-service:
+    build: ./auth
+    # container_name: auth-service # Commented out to allow scaling
+    # ports:
+    #   - "3001:3001" # Commented out to allow scaling with docker-compose --scale
+    environment:
+      - PORT=3001
+      - MONGODB_URI=mongodb://mongodb:27017/crypto_auth
+      - JWT_SECRET=your-secret-key-change-in-production
+      - JWT_EXPIRY=24h
+      - KAFKA_BROKERS=kafka:29092
+      - CONSUL_HOST=consul
+      - SERVICE_ADDRESS=auth-service
+    depends_on:
+      - mongodb
+      - kafka
+      - consul
+    networks:
+      - default
+
+  api-gateway:
+    build: ./api-gateway
+    container_name: api-gateway
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - CONSUL_HOST=consul
+      - JWT_SECRET=your-secret-key-change-in-production
+    depends_on:
+      - redis
+      - consul
+      - auth-service
+    networks:
+      - default
 
 networks:
   default:
     name: discovery-net
+
+volumes:
+  mongodb_data:
