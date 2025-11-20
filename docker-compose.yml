@@ -73,9 +73,9 @@ services:
 
   auth-service:
     build: ./auth
-    # container_name: auth-service # Commented out to allow scaling
-    # ports:
-    #   - "3001:3001" # Commented out to allow scaling with docker-compose --scale
+    container_name: auth-service # Commented out to allow scaling
+    ports:
+      - "3001:3001" # Commented out to allow scaling with docker-compose --scale
     environment:
       - PORT=3001
       - MONGODB_URI=mongodb://mongodb:27017/crypto_auth
