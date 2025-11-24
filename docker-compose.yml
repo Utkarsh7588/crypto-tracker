@@ -29,6 +29,19 @@ services:
     networks:
       - default
 
+  kafka-setup:
+    image: confluentinc/cp-kafka:7.4.0
+    container_name: kafka-setup
+    depends_on:
+      - kafka
+    command: "bash -c 'echo Waiting for Kafka to be ready... && \
+                       cub kafka-ready -b kafka:29092 1 20 && \
+                       kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --partitions 3 --replication-factor 1 --topic email-verification && \
+                       kafka-topics --alter --bootstrap-server kafka:29092 --topic email-verification --partitions 3 || true && \
+                       echo Topic configured'"
+    networks:
+      - default
+
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     container_name: kafka-ui
@@ -73,9 +86,9 @@ services:
 
   auth-service:
     build: ./auth
-    container_name: auth-service # Commented out to allow scaling
-    ports:
-      - "3001:3001" # Commented out to allow scaling with docker-compose --scale
+    # container_name: auth-service # Commented out to allow scaling
+    # ports:
+    #   - "3001:3001" # Commented out to allow scaling with docker-compose --scale
     environment:
       - PORT=3001
       - MONGODB_URI=mongodb://mongodb:27017/crypto_auth
@@ -88,6 +101,7 @@ services:
       - mongodb
       - kafka
       - consul
+      - kafka-setup
     networks:
       - default
 

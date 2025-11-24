@@ -1,7 +1,8 @@
 const { Kafka } = require('kafkajs');
+const os = require('os');
 
 const kafka = new Kafka({
-  clientId: 'auth-service',
+  clientId: `auth-service-${os.hostname()}`,
   brokers: process.env.KAFKA_BROKERS ? process.env.KAFKA_BROKERS.split(',') : ['localhost:9092']
 });
 
