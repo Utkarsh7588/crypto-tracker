@@ -19,6 +19,9 @@ const healthRoutes = require('./src/routes/health');
 class APIGateway {
   constructor() {
     this.app = express();
+    // Trust proxy is required when running behind a load balancer or reverse proxy (like Docker/Nginx)
+    // to correctly identify the client's IP address for rate limiting.
+    this.app.set('trust proxy', 1);
     this.setupMiddleware();
     this.setupRoutes();
   }
@@ -26,7 +29,7 @@ class APIGateway {
   setupMiddleware() {
     // Security middleware
     securityMiddleware(this.app);
-    
+
     // Global rate limiting - more lenient for auth endpoints
     this.app.use(rateLimiter.limit({
       windowMs: 15 * 60 * 1000,
@@ -48,7 +51,7 @@ class APIGateway {
       }
       authMiddleware.authenticate(req, res, next);
     });
-    
+
     // User-specific rate limiting for non-auth endpoints
     this.app.use(rateLimiter.userLimit({
       windowMs: 15 * 60 * 1000,
@@ -62,10 +65,10 @@ class APIGateway {
 
     // Auth service routing
     this.app.use('/api/auth/*', this.routeToAuthService.bind(this));
-    
+
     // Dynamic service routing for other services
     this.app.use('/api/:service/*', this.routeToService.bind(this));
-    
+
     // Fallback route
     this.app.use('*', (req, res) => {
       res.status(404).json({ error: 'Service not found' });
@@ -77,7 +80,7 @@ class APIGateway {
       // Discover auth service from Consul
       const authServiceUrl = await loadBalancer.getServerWithFallback('auth-service');
       console.log(`🔍 Routing auth request to: ${authServiceUrl}`);
-      
+
       const proxy = createProxyMiddleware({
         target: authServiceUrl,
         changeOrigin: true,
@@ -94,7 +97,7 @@ class APIGateway {
         },
         onError: (err, req, res) => {
           console.error('❌ Auth service proxy error:', err);
-          res.status(502).json({ 
+          res.status(502).json({
             error: 'Authentication service unavailable',
             message: 'Please try again later'
           });
@@ -104,7 +107,7 @@ class APIGateway {
       proxy(req, res, next);
     } catch (error) {
       console.error('❌ Auth service routing error:', error);
-      res.status(503).json({ 
+      res.status(503).json({
         error: 'Authentication service temporarily unavailable',
         message: error.message
       });
@@ -115,41 +118,44 @@ class APIGateway {
     try {
       const serviceName = req.params.service;
       const servicePath = req.params[0] || '';
-      
+
       console.log(`🔍 Discovering service: ${serviceName}`);
-      
+
       // Get service URL using load balancer
       const serviceUrl = await loadBalancer.getServerWithFallback(serviceName);
       console.log(`🔄 Routing to ${serviceName} at: ${serviceUrl}`);
-      
+
       const proxy = createProxyMiddleware({
         target: serviceUrl,
         changeOrigin: true,
         pathRewrite: {
-          [`^/api/${serviceName}`]: ''
+          [`^/api/${serviceName}`]: '' // Remove the service prefix from the path
         },
         onProxyReq: (proxyReq, req) => {
-          // Pass user info to downstream services
-          if (req.user) {
-            proxyReq.setHeader('x-user-id', req.user.id);
-            proxyReq.setHeader('x-user-roles', req.user.roles?.join(',') || 'user');
-          }
-          proxyReq.setHeader('x-gateway-source', 'api-gateway');
           console.log(`➡️  Proxying ${req.method} ${req.originalUrl} to ${serviceName}`);
+          proxyReq.setHeader('x-gateway-source', 'api-gateway');
+
+          // Safely set user headers if user is authenticated
+          if (req.user && req.user.userId) {
+            proxyReq.setHeader('x-user-id', req.user.userId);
+          }
         },
         onProxyRes: (proxyRes, req, res) => {
           console.log(`⬅️  Response from ${serviceName}: ${proxyRes.statusCode}`);
         },
         onError: (err, req, res) => {
           console.error(`❌ ${serviceName} proxy error:`, err);
-          res.status(502).json({ error: 'Service unavailable' });
+          res.status(502).json({
+            error: `${serviceName} service unavailable`,
+            message: 'Please try again later'
+          });
         }
       });
 
       proxy(req, res, next);
     } catch (error) {
       console.error(`❌ Service routing error for ${req.params.service}:`, error);
-      res.status(503).json({ 
+      res.status(503).json({
         error: 'Service temporarily unavailable',
         message: error.message
       });
@@ -159,7 +165,7 @@ class APIGateway {
   async start(port = 3000) {
     // Connect to Redis first
     await redisConfig.connect();
-    
+
     this.server = this.app.listen(port, () => {
       console.log(`🚀 API Gateway running on port ${port}`);
       console.log(`🔍 Service discovery: ENABLED`);
@@ -187,7 +193,6 @@ async function main() {
   try {
     const gateway = new APIGateway();
     await gateway.start(3000);
-    
   } catch (error) {
     console.error('❌ Failed to start API Gateway:', error);
     process.exit(1);
