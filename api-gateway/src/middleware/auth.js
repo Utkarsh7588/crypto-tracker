@@ -8,12 +8,12 @@ class AuthMiddleware {
 
   authenticate = (req, res, next) => {
     // Skip auth for health checks
-    if (req.path === '/health' || req.path === '/auth/login') {
+    if (req.path === '/health' || req.path === '/auth-service/login' || req.path === '/auth-service/verify/email' || req.path === '/auth-service/signup') {
       return next();
     }
 
     const token = this.extractToken(req);
-    
+
     if (!token) {
       return res.status(401).json({ error: 'Authentication token required' });
     }

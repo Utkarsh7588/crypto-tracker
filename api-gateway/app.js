@@ -34,11 +34,11 @@ class APIGateway {
     this.app.use(rateLimiter.limit({
       windowMs: 15 * 60 * 1000,
       max: 100,
-      skip: (req) => req.path === '/health' || req.path.startsWith('/api/auth/')
+      skip: (req) => req.path === '/health' || req.path.startsWith('/api/auth-service/')
     }));
 
     // Stricter rate limiting for auth endpoints
-    this.app.use('/api/auth/*', rateLimiter.limit({
+    this.app.use('/api/auth-service/*', rateLimiter.limit({
       windowMs: 15 * 60 * 1000,
       max: 10,
       message: 'Too many authentication attempts, please try again later.'
@@ -46,7 +46,7 @@ class APIGateway {
 
     // Skip authentication for auth endpoints and health checks
     this.app.use((req, res, next) => {
-      if (req.path.startsWith('/api/auth/') || req.path === '/health') {
+      if (req.path.startsWith('/api/auth-service/') || req.path === '/health') {
         return next();
       }
       authMiddleware.authenticate(req, res, next);
@@ -63,8 +63,7 @@ class APIGateway {
     // Health route
     this.app.use(healthRoutes);
 
-    // Auth service routing
-    this.app.use('/api/auth/*', this.routeToAuthService.bind(this));
+    // Auth service routing handled by dynamic routing now
 
     // Dynamic service routing for other services
     this.app.use('/api/:service/*', this.routeToService.bind(this));
@@ -73,45 +72,6 @@ class APIGateway {
     this.app.use('*', (req, res) => {
       res.status(404).json({ error: 'Service not found' });
     });
-  }
-
-  async routeToAuthService(req, res, next) {
-    try {
-      // Discover auth service from Consul
-      const authServiceUrl = await loadBalancer.getServerWithFallback('auth-service');
-      console.log(`🔍 Routing auth request to: ${authServiceUrl}`);
-
-      const proxy = createProxyMiddleware({
-        target: authServiceUrl,
-        changeOrigin: true,
-        pathRewrite: {
-          '^/api/auth': '/api/auth' // Keep the path as is for your auth server
-        },
-        onProxyReq: (proxyReq, req) => {
-          console.log(`➡️  Proxying ${req.method} ${req.originalUrl} to auth service`);
-          // Add additional headers if needed
-          proxyReq.setHeader('x-gateway-source', 'api-gateway');
-        },
-        onProxyRes: (proxyRes, req, res) => {
-          console.log(`⬅️  Response from auth service: ${proxyRes.statusCode}`);
-        },
-        onError: (err, req, res) => {
-          console.error('❌ Auth service proxy error:', err);
-          res.status(502).json({
-            error: 'Authentication service unavailable',
-            message: 'Please try again later'
-          });
-        }
-      });
-
-      proxy(req, res, next);
-    } catch (error) {
-      console.error('❌ Auth service routing error:', error);
-      res.status(503).json({
-        error: 'Authentication service temporarily unavailable',
-        message: error.message
-      });
-    }
   }
 
   async routeToService(req, res, next) {
