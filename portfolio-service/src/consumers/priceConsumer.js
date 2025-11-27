@@ -13,10 +13,10 @@ const startPriceConsumer = async () => {
                     const prices = JSON.parse(message.value.toString());
                     // Create a map for faster lookup
                     const priceMap = new Map(prices.map(p => [p.symbol, p.price]));
-
+                    console.log("fetching portfolio")
                     // Iterate all portfolios (MVP approach)
                     const portfolios = await Portfolio.find({});
-
+                    console.log("Portfolios fetched");
                     for (const portfolio of portfolios) {
                         let totalValue = 0;
                         for (const coin of portfolio.coins) {
@@ -25,7 +25,7 @@ const startPriceConsumer = async () => {
                                 totalValue += coin.quantity * parseFloat(currentPrice);
                             }
                         }
-
+                        console.log("publishing portfolio update")
                         // Publish portfolio update
                         await producer.send({
                             topic: 'portfolio_updates',
@@ -34,10 +34,14 @@ const startPriceConsumer = async () => {
                                     userId: portfolio.userId,
                                     totalValue: totalValue.toFixed(2),
                                     alertsEnabled: portfolio.alertsEnabled,
+                                    alertThreshold: portfolio.alertThreshold,
+                                    lastEmailSent: portfolio.lastEmailSent,
                                     timestamp: new Date().toISOString()
                                 })
                             }]
                         });
+
+                        console.log("portfolio update published");
                     }
                 } catch (error) {
                     console.error('❌ Error processing price update:', error);

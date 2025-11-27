@@ -48,15 +48,33 @@ router.post('/add', async (req, res) => {
 // Update Settings
 router.put('/settings', async (req, res) => {
     const userId = req.headers['x-user-id'] || 'default-user';
-    const { alertsEnabled } = req.body;
+    const { alertsEnabled, alertThreshold } = req.body;
 
     try {
+        const updateData = {};
+        if (alertsEnabled !== undefined) updateData.alertsEnabled = alertsEnabled;
+        if (alertThreshold !== undefined) updateData.alertThreshold = alertThreshold;
+
         const portfolio = await Portfolio.findOneAndUpdate(
             { userId },
-            { alertsEnabled },
+            updateData,
             { new: true, upsert: true }
         );
         res.json(portfolio);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// Internal: Update last email sent timestamp
+router.put('/internal/email-sent', async (req, res) => {
+    const { userId } = req.body;
+    try {
+        await Portfolio.findOneAndUpdate(
+            { userId },
+            { lastEmailSent: new Date() }
+        );
+        res.json({ success: true });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
