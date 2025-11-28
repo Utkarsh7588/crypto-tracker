@@ -19,7 +19,7 @@ The project is composed of several microservices communicating via Kafka and RES
 - **Notification Service** (`notification-service`): Handles email notifications for user events.
   - Port: `3004` (Internal)
 - **WebSocket Service** (`websocket-service`): Provides real-time updates to the frontend via WebSockets.
-  - Port: `3005`
+  - Port: `5173`
 - **Frontend** (`frontend`): React/Vite application for the user interface.
 
 ### Infrastructure
