@@ -38,7 +38,11 @@ services:
                        cub kafka-ready -b kafka:29092 1 20 && \
                        kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --partitions 3 --replication-factor 1 --topic email-verification && \
                        kafka-topics --alter --bootstrap-server kafka:29092 --topic email-verification --partitions 3 || true && \
-                       echo Topic configured'"
+                       kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --partitions 3 --replication-factor 1 --topic price_updates && \
+                       kafka-topics --alter --bootstrap-server kafka:29092 --topic price_updates --partitions 3 || true && \
+                       kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --partitions 3 --replication-factor 1 --topic portfolio_updates && \
+                       kafka-topics --alter --bootstrap-server kafka:29092 --topic portfolio_updates --partitions 3 || true && \
+                       echo Topics configured'"
     networks:
       - default
 
@@ -85,7 +89,7 @@ services:
       - default
 
   auth-service:
-    build: ./auth
+    build: ./auth-service
     # container_name: auth-service # Commented out to allow scaling
     # ports:
     #   - "3001:3001" # Commented out to allow scaling with docker-compose --scale
@@ -120,6 +124,68 @@ services:
       - redis
       - consul
       - auth-service
+    networks:
+      - default
+
+  price-service:
+    build: ./price-service
+    environment:
+      - PORT=3002
+      - KAFKA_BROKERS=kafka:29092
+      - CONSUL_HOST=consul
+      - SERVICE_ADDRESS=price-service
+    depends_on:
+      - kafka
+      - consul
+      - kafka-setup
+    networks:
+      - default
+
+  portfolio-service:
+    build: ./portfolio-service
+    environment:
+      - PORT=3003
+      - MONGODB_URI=mongodb://mongodb:27017/crypto_portfolio
+      - KAFKA_BROKERS=kafka:29092
+      - CONSUL_HOST=consul
+      - SERVICE_ADDRESS=portfolio-service
+    depends_on:
+      - mongodb
+      - kafka
+      - consul
+      - kafka-setup
+    networks:
+      - default
+
+  notification-service:
+    build: ./notification-service
+    environment:
+      - PORT=3004
+      - KAFKA_BROKERS=kafka:29092
+      - CONSUL_HOST=consul
+      - SERVICE_ADDRESS=notification-service
+      - AUTH_SERVICE_URL=http://auth-service:3001
+      - PORTFOLIO_SERVICE_URL=http://portfolio-service:3003
+    depends_on:
+      - kafka
+      - consul
+      - kafka-setup
+    networks:
+      - default
+
+  websocket-service:
+    build: ./websocket-service
+    ports:
+      - "3005:3005"
+    environment:
+      - PORT=3005
+      - KAFKA_BROKERS=kafka:29092
+      - CONSUL_HOST=consul
+      - SERVICE_ADDRESS=websocket-service
+    depends_on:
+      - kafka
+      - consul
+      - kafka-setup
     networks:
       - default
 
